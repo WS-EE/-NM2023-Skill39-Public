@@ -1,0 +1,59 @@
+[
+    {
+        "type": "A",
+        "state": "present",
+        "zone": "eestiasi.ee",
+        "name": "vlnd-fw",
+        "value": "172.20.0.1"
+    },
+    {
+        "type": "A",
+        "state": "present",
+        "zone": "eestiasi.ee",
+        "name": "trt-fw",
+        "value": "172.30.0.1"
+    },
+    {
+        "type": "A",
+        "state": "present",
+        "zone": "eestiasi.ee",
+        "name": "zabbix",
+        "value": "172.20.0.4"
+    },
+    {
+        "type": "A",
+        "state": "present",
+        "zone": "eestiasi.ee",
+        "name": "trt-www",
+        "value": "172.30.0.5"
+    },
+    {
+        "type": "A",
+        "state": "present",
+        "zone": "eestiasi.ee",
+        "name": "trt-mail",
+        "value": "172.30.0.10"
+    },
+    {
+        "type": "CNAME",
+        "state": "present",
+        "zone": "eestiasi.ee",
+        "name": "www",
+        "value": "trt-www.eestiasi.ee"
+    },
+    {
+        "type": "CNAME",
+        "state": "present",
+        "zone": "eestiasi.ee",
+        "name": "mail",
+        "value": "trt-mail.eestiasi.ee"
+    },
+    {
+        "type": "MX",
+        "state": "present",
+        "zone": "eestiasi.ee",
+        "name": ".",
+        "value": "mail.eestiasi.ee",
+        "preference": 10
+    }
+]

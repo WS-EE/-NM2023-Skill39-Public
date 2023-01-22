@@ -1,0 +1,8 @@
+vmware:
+  host: <vmware hostname>
+  datacenter: <vmware datacenter> # default ha-datacenter for ESXi
+  datastore: <vmware datastore> # default datastore1 for ESXi
+
+template:
+  win_username: Administrator
+  win_password: 'Passw0rd$'

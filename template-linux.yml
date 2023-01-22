@@ -1,0 +1,38 @@
+- name: Configure linux servers
+  hosts: linux
+  gather_facts: false
+  become: true
+  vars:
+    meister_password: 'Passw0rd$'
+  tasks:
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+      notify:
+        - Restart machine
+        - Set hosts
+      tags:
+        - hostname
+
+    - name: Add meister user
+      ansible.builtin.user:
+        name: meister
+        password: "{{ meister_password | password_hash('sha512') }}"
+        group: meister
+        groups: sudo, meister
+        state: present
+        create_home: true
+        skeleton: /home/meister
+        shell: /bin/bash
+      when: "'isp' not in group_names"
+
+  handlers:
+
+    - name: Restart machine
+      ansible.builtin.reboot:
+
+    - name: Set hosts
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        insertafter: 127.0.0.1  localhost
+        line: "127.1.1.1   {{ inventory_hostname }}"

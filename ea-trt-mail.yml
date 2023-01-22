@@ -1,0 +1,99 @@
+- name: Configure mail server on trt site
+  hosts: trt-mail
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Install postfix
+      ansible.builtin.apt:
+        name: postfix
+        state: present
+      tags:
+        - install
+
+    - name: Install dovecot
+      ansible.builtin.apt:
+        name: dovecot-core, dovecot-imapd
+        state: present
+      tags:
+        - install
+
+    - name: Move ssl key file
+      ansible.builtin.copy:
+        src: /etc/ssl/private/ssl-cert-snakeoil.key
+        dest: /etc/ssl/certs/ssl-cert-snakeoil.key
+        mode: 0644
+        owner: root
+        group: root
+        remote_src: true
+      tags:
+        - conf
+
+    - name: Configure postfix
+      ansible.builtin.copy:
+        src: "{{ file.src }}"
+        dest: "{{ file.dest }}"
+        mode: 0644
+        owner: root
+        group: root
+      notify: Restart postfix
+      loop:
+        - { src: "templates/mail/main.cf", dest: "/etc/postfix/main.cf" }
+        - { src: "templates/mail/master.cf", dest: "/etc/postfix/master.cf" }
+      loop_control:
+        loop_var: file
+      tags:
+        - conf
+
+    - name: Configure aliases
+      ansible.builtin.copy:
+        src: templates/mail/aliases
+        dest: /etc/aliases
+        mode: 0644
+        owner: root
+        group: root
+      notify: alias
+      tags:
+        - conf
+
+    - name: Configure dovecot
+      ansible.builtin.copy:
+        src: "{{ dovecot.src }}"
+        dest: "{{ dovecot.dest }}"
+        mode: 0644
+        owner: root
+        group: root
+      notify: Restart dovecot
+      loop:
+        - { src: "templates/mail/dovecot.conf", dest: "/etc/dovecot/dovecot.conf" }
+        - { src: "templates/mail/dovecot-10-master.conf", dest: "/etc/dovecot/conf.d/10-master.conf" }
+        - { src: "templates/mail/dovecot-10-ssl.conf", dest: "/etc/dovecot/conf.d/10-ssl.conf" }
+      loop_control:
+        loop_var: dovecot
+
+    - name: Make sure mail file exists for users
+      ansible.builtin.file:
+        path: "/var/mail/{{ user }}"
+        state: touch
+        mode: 0770
+        owner: "{{ user }}"
+        group: mail
+      loop:
+        - meister
+      loop_control:
+        loop_var: user
+      tags:
+        - conf
+
+  handlers:
+    - name: Restart postfix
+      ansible.builtin.service:
+        name: postfix
+        state: restarted
+
+    - name: Restart dovecot
+      ansible.builtin.service:
+        name: dovecot
+        state: restarted
+
+    - name: Alias
+      ansible.builtin.shell: newaliases

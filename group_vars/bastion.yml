@@ -1,0 +1,7 @@
+# Jump host variables
+bastion:
+  host: <bastion ip>
+  user: jump
+  key: '~/.ssh/nm23'
+
+ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q {{ bastion.user }}@{{ bastion.host }} -i {{ bastion.key }}"'

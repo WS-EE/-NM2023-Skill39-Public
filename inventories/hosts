@@ -1,0 +1,42 @@
+all:
+  hosts:
+    vlnd-fw:
+      ansible_host: "{{ network.vlnd.ip }}.1"
+    vlnd-dc1:
+      ansible_host: "{{ network.vlnd.ip }}.2"
+    zabbix:
+      ansible_host: "{{ network.vlnd.ip }}.4"
+    trt-fw:
+      ansible_host: "{{ network.trt.ip }}.1"
+    trt-dc1:
+      ansible_host: "{{ network.trt.ip }}.2"
+    trt-www:
+      ansible_host: "{{ network.trt.ip }}.5"
+      db:
+        name: wordpress_db
+        user: wordpress_user
+        password: Passw0rd$
+    trt-mail:
+      ansible_host: "{{ network.trt.ip }}.10"
+  children:
+    bastion:
+      children:
+        windows:
+          children:
+            dc:
+              hosts:
+                trt-dc1:
+                vlnd-dc1:
+        linux:
+          children:
+            ea:
+              hosts:
+                trt-mail:
+                trt-www:
+                zabbix:
+            opnsense:
+              hosts:
+                trt-fw:
+                vlnd-fw:
+              vars:
+                public_interface: vmx0

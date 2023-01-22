@@ -1,0 +1,156 @@
+---
+- name: Docker Engine
+  hosts: zabbix
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Add an Docker Apt signing key
+      ansible.builtin.apt_key:
+        url: "https://download.docker.com/linux/{{ ansible_os_family | lower }}/gpg"
+        keyring: /etc/apt/trusted.gpg.d/docker.gpg
+        state: present
+
+    - name: Add Docker repository to sources.list.d
+      ansible.builtin.apt_repository:
+        repo: "deb https://download.docker.com/linux/{{ ansible_os_family | lower }} {{ ansible_distribution_release }} stable"
+        filename: docker
+        update_cache: true
+        state: present
+
+    - name: Install Docker Engine with plugins
+      ansible.builtin.apt:
+        name: docker-ce, docker-ce-cli, containerd.io, python3-docker
+        state: present
+
+    - name: Systemd Docker service st1ate
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
+
+- name: Zabbix
+  hosts: zabbix
+  gather_facts: false
+  become: true
+  vars:
+    mysql:
+      database: 'zabbix'
+      user: 'zabbix'
+      password: 'Passw0rd$'
+      root_password: 'Passw0rd$'
+  tasks:
+    - name: Create Zabbix network
+      community.docker.docker_network:
+        name: zabbix-net
+        ipam_config:
+          - subnet: 192.168.200.0/24
+
+    - name: Zabbix MySQL Database
+      community.docker.docker_container:
+        name: zabbix-mysql
+        image: mysql:8.0-oracle
+        published_ports: '3306:3306'
+        dns_search_domains: eestiasi.ee
+        dns_servers: [172.20.0.2, 172.20.0.3]
+        networks:
+          - name: zabbix-net
+        env:
+          MYSQL_DATABASE: '{{ mysql.database }}'
+          MYSQL_USER: '{{ mysql.user }}'
+          MYSQL_PASSWORD: '{{ mysql.password }}'
+          MYSQL_ROOT_PASSWORD: '{{ mysql.root_password }}'
+        command:
+          - mysqld
+          - --character-set-server=utf8mb4
+          - --collation-server=utf8mb4_bin
+          - --skip-character-set-client-handshake
+          - --default-authentication-plugin=mysql_native_password
+        pull: true
+        recreate: true
+        restart_policy: unless-stopped
+
+    - name: Zabbix Java Gateway
+      community.docker.docker_container:
+        name: zabbix-java-gateway
+        image: zabbix/zabbix-java-gateway:alpine-6.2-latest
+        dns_search_domains: eestiasi.ee
+        dns_servers: [172.20.0.2, 172.20.0.3]
+        networks:
+          - name: zabbix-net
+        pull: true
+        recreate: true
+        restart_policy: unless-stopped
+
+    - name: Zabbix Server
+      community.docker.docker_container:
+        name: zabbix-server
+        image: zabbix/zabbix-server-mysql:alpine-6.2-latest
+        published_ports: '10051:10051'
+        dns_search_domains: eestiasi.ee
+        dns_servers: [172.20.0.2, 172.20.0.3]
+        networks:
+          - name: zabbix-net
+        env:
+          DB_SERVER_HOST: zabbix-mysql
+          MYSQL_DATABASE: '{{ mysql.database }}'
+          MYSQL_USER: '{{ mysql.user }}'
+          MYSQL_PASSWORD: '{{ mysql.password }}'
+          MYSQL_ROOT_PASSWORD: '{{ mysql.root_password }}'
+          MYSQL_ROOT_HOST: '%'
+          ZBX_JAVAGATEWAY_ENABLE: 'true'
+          ZBX_JAVAGATEWAY: zabbix-java-gateway
+        pull: true
+        recreate: true
+        restart_policy: unless-stopped
+
+    - name: Zabbix Web interface
+      community.docker.docker_container:
+        name: zabbix-web
+        image: zabbix/zabbix-web-nginx-mysql:alpine-6.2-latest
+        published_ports: '80:8080'
+        dns_search_domains: eestiasi.ee
+        dns_servers: [172.20.0.2, 172.20.0.3]
+        networks:
+          - name: zabbix-net
+        env:
+          ZBX_SERVER_NAME: 'Eesti Asi - Monitooring'
+          ZBX_SERVER_HOST: zabbix-server
+          DB_SERVER_HOST: zabbix-mysql
+          MYSQL_DATABASE: '{{ mysql.database }}'
+          MYSQL_USER: '{{ mysql.user }}'
+          MYSQL_PASSWORD: '{{ mysql.password }}'
+          MYSQL_ROOT_PASSWORD: '{{ mysql.root_password }}'
+        pull: true
+        recreate: true
+        restart_policy: unless-stopped
+
+    - name: Wait Zabbix to initialize DB
+      ansible.builtin.uri:
+        url: http://127.0.0.1:80/
+        method: GET
+        return_content: true
+        status_code: 200
+        body_format: raw
+      register: result
+      until: '"Username" in result.content'
+      retries: 20
+      delay: 6
+
+    - name: Install PyMySQL
+      ansible.builtin.apt:
+        name: python3-pymysql
+        state: present
+
+    - name: Create Zabbix users
+      community.mysql.mysql_query:
+        login_host: localhost
+        login_user: '{{ mysql.user }}'
+        login_password: '{{ mysql.password }}'
+        login_db: '{{ mysql.database }}'
+        query: |
+          INSERT INTO users (userid, username, passwd, lang, refresh, theme, attempt_failed, attempt_clock, rows_per_page, timezone, roleid)
+          VALUES ({{ item.userid }}, "{{ item.username }}", "{{ item.hash }}", "default", "30s", "default", 0, 0, 50, "default", 3);
+      loop:
+        - { userid: 11, username: 'scorer', hash: '$2y$10$mwUB1nNKhT2fQwC2mZwypufpFkZS4BGxj11ESDyRyS0CRikuwko66' }
+        - { userid: 12, username: 'kohtunik', hash: '$2y$10$X2h4AEgZmNrIhVxrBEPXBuSEEhAbU2Jwz3biVJf7Y62kno.oxMP5C' }
+        - { userid: 13, username: 'meister', hash: '$2y$10$iF2ST3aELXoVv7OP87DAGu3PgXH/xoSbk8SYju48R4kjZP2T0rjjy' }

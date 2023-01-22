@@ -1,0 +1,11 @@
+ansible_user: administrator
+ansible_shell_type: cmd
+
+domain:
+  pdc: '{{ hostvars[groups["dc"][0]].inventory_hostname }}'
+  domain_admin: 'Administrator@eestiasi.ee'
+  domain_admin_password: Passw0rd$
+  safe_mode_password: Passw0rd$
+  ous:
+    - Viljandi
+    - Tartu

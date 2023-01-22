@@ -1,0 +1,18 @@
+# Public Key
+ssh:
+  master_key: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMOCdku/jwmZ1eMFagRANU5L/asPZe4TTP+sp52tDNfP'
+
+# General network variables
+network:
+  isp:
+    ip: "198.51.100"
+    bits: 24
+    netmask: 255.255.255.0
+  vlnd:
+    ip: "172.20.0"
+    bits: 29
+    netmask: 255.255.255.248
+  trt:
+    ip: "172.30.0"
+    bits: 28
+    netmask: 255.255.255.240

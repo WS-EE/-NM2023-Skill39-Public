@@ -1,0 +1,171 @@
+---
+- name: Configure Hostname
+  hosts: windows
+  tags: hostname
+  gather_facts: false
+  tasks:
+    - name: Hostname
+      ansible.windows.win_hostname:
+        name: '{{ inventory_hostname }}'
+      notify: Reboot Windows
+
+  handlers:
+    - name: Reboot Windows
+      ansible.windows.win_reboot:
+
+- name: Configure DNS Servers at Clients
+  hosts: windows
+  tags:
+    - dnscli
+    - dns
+  gather_facts: false
+  tasks:
+    - name: Build list of DNS Servers
+      ansible.builtin.set_fact:
+        dc_ips: '{{ dc_ips | default([]) + [hostvars[item].ansible_host] }}'
+      with_items: '{{ groups.dc }}'
+
+    - name: Configure DNS Servers
+      ansible.windows.win_dns_client:
+        adapter_names: '*'
+        ipv4_addresses: '{{ dc_ips if inventory_hostname != domain.pdc else dc_ips | reverse }}'
+
+- name: Configure Active Directory Domain Services
+  hosts: dc
+  tags: dc
+  gather_facts: false
+  tasks:
+    - name: Install ADDS
+      ansible.windows.win_feature:
+        name: AD-Domain-Services
+        include_sub_features: true
+        state: present
+
+    - name: Configure PDC for eestiasi.ee
+      ansible.windows.win_domain:
+        dns_domain_name: eestiasi.ee
+        safe_mode_password: '{{ domain.safe_mode_password }}'
+        domain_mode: WinThreshold
+        forest_mode: WinThreshold
+      when: inventory_hostname == domain.pdc
+      register: pdc_promo
+
+    - name: PDC reboot after promo
+      ansible.windows.win_reboot:
+      when: pdc_promo is defined and pdc_promo.changed
+
+    - name: Restart ADDS
+      ansible.windows.win_service:
+        name: NTDS
+        state: restarted
+        force_dependent_services: true
+      when: pdc_promo is defined and pdc_promo.changed
+      failed_when: false
+
+    - name: Promote other DCs
+      ansible.windows.win_domain_controller:
+        dns_domain_name: eestiasi.ee
+        domain_admin_user: '{{ domain.domain_admin }}'
+        domain_admin_password: '{{ domain.domain_admin_password }}'
+        safe_mode_password: '{{ domain.safe_mode_password }}'
+        state: domain_controller
+      when: inventory_hostname != domain.pdc
+      register: dc_promo
+
+    - name: DC reboot after promo
+      ansible.windows.win_reboot:
+      when: dc_promo is defined and dc_promo.changed
+
+- name: Configure DNS
+  hosts: dc[0]
+  tags:
+    - dnssrv
+    - dns
+  gather_facts: false
+  tasks:
+    - name: Read DNS records JSON
+      delegate_to: localhost
+      ansible.builtin.shell:
+        cmd: 'cat templates/ad/dns.json'
+      register: records
+
+    - name: Create DNS records dictionary
+      ansible.builtin.set_fact:
+        records: '{{ records.stdout | from_json }}'
+
+    - name: Create A & CNAME records
+      community.windows.win_dns_record:
+        type: '{{ item.type }}'
+        state: '{{ item.state }}'
+        zone: '{{ item.zone }}'
+        name: '{{ item.name }}'
+        value: '{{ item.value }}'
+      with_items: '{{ records }}'
+      when: item.type != "MX"
+      loop_control:
+        label: '{{ item.type }} - {{ item.name }} - {{ item.value }}'
+
+    - name: Create MX records
+      ansible.windows.win_shell: >
+        if ((Get-DnsServerResourceRecord -ZoneName "{{ item.zone }}" -RRType "MX").RecordData | Where-Object { $_.MailExchange -Like "{{ item.value }}." })
+        { exit 1001 } else {
+        Add-DnsServerResourceRecord -Name "." -MX -ZoneName "{{ item.zone }}" -MailExchange "{{ item.value }}" -Preference {{ item.preference }}
+        }
+      with_items: '{{ records }}'
+      when: item.type == "MX"
+      loop_control:
+        label: '{{ item.type }} - {{ item.name }} - {{ item.value }}'
+      register: mx
+      changed_when: mx.rc == 0
+      failed_when: mx.rc == 1
+
+    - name: DNS zone update policy
+      community.windows.win_dns_zone:
+        name: eestiasi.ee
+        dynamic_update: nonsecureandsecure
+
+- name: Create Eesti Asi AS users
+  hosts: dc[0]
+  tags: users
+  gather_facts: false
+  tasks:
+    - name: Read users JSON
+      delegate_to: localhost
+      ansible.builtin.shell:
+        cmd: 'cat templates/ad/users.json'
+      register: users
+
+    - name: Create users dictionary
+      ansible.builtin.set_fact:
+        users: '{{ users.stdout | from_json }}'
+
+    - name: Add OUs
+      ansible.windows.win_shell: >
+        if (Get-ADOrganizationalUnit -Filter 'distinguishedName -eq "ou={{ item }},dc=eestiasi,dc=ee"')
+        { Exit 1001 } else {
+        New-ADOrganizationalUnit -Name '{{ item }}' -Path 'dc=eestiasi,dc=ee'
+        }
+      with_items: '{{ domain.ous }}'
+      loop_control:
+        label: '{{ item }}'
+      register: ou
+      changed_when: ou.rc == 0
+      failed_when: ou.rc == 1
+
+    - name: Add users
+      community.windows.win_domain_user:
+        state: present
+        enabled: '{{ item.enabled }}'
+        path: 'ou={{ item.path }},dc=eestiasi,dc=ee'
+        name: '{{ item.username }}'
+        firstname: '{{ item.firstname }}'
+        surname: '{{ item.surname }}'
+        password: '{{ item.password }}'
+        update_password: on_create
+        city: '{{ item.city }}'
+        description: '{{ item.description }}'
+        attributes:
+          title: '{{ item.title }}'
+      with_items: '{{ users }}'
+      loop_control:
+        label: '{{ item.username }}'

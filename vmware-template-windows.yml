@@ -1,0 +1,77 @@
+---
+- name: Template - Windows
+  hosts: windows
+  gather_facts: false
+  tasks:
+    - name: Load personal credentials
+      ansible.builtin.include_vars: '.creds.yml'
+      delegate_to: localhost
+
+    - name: Template state # used later on to determine if template already exist
+      community.vmware.vmware_vm_info:
+        validate_certs: false
+        hostname: '{{ vmware.host }}'
+        username: '{{ vmware_user }}'
+        password: '{{ vmware_password }}'
+        vm_name: '{{ inventory_hostname }}'
+        vm_type: template
+      delegate_to: localhost
+      register: template_state
+
+    - name: Copy files for sysprep
+      community.vmware.vmware_guest_file_operation:
+        validate_certs: false
+        hostname: '{{ vmware.host }}'
+        username: '{{ vmware_user }}'
+        password: '{{ vmware_password }}'
+        datacenter: '{{ vmware.datacenter }}'
+        vm_id: '{{ inventory_hostname }}'
+        vm_username: '{{ template.win_username }}'
+        vm_password: '{{ template.win_password }}'
+        copy:
+          src: '{{ item.src }}'
+          dest: '{{ item.dst }}'
+      loop:
+        - { src: 'templates/sysprep/unattend.xml', dst: 'C:\Windows\System32\sysprep\unattend.xml' }
+      delegate_to: localhost
+      when: template_state.virtual_machines == []
+
+    - name: Initialize template
+      community.vmware.vmware_vm_shell:
+        validate_certs: false
+        hostname: '{{ vmware.host }}'
+        username: '{{ vmware_user }}'
+        password: '{{ vmware_password }}'
+        datacenter: '{{ vmware.datacenter }}'
+        vm_id: '{{ inventory_hostname }}'
+        vm_username: '{{ template.win_username }}'
+        vm_password: '{{ template.win_password }}'
+        vm_shell: '{{ item.shell }}'
+        vm_shell_args: '{{ item.args }}'
+        wait_for_process: false
+      loop:
+        - { shell: 'cmd.exe', args: '/c powershell.exe -c "Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0"' }
+        - { shell: 'cmd.exe', args: '/c powershell.exe -c "Set-Service -Name sshd -StartupType Automatic"'}
+        - { shell: 'cmd.exe', args: '/c powershell.exe -c "Set-Service -Name ssh-agent -StartupType Automatic"'}
+        - { shell: 'cmd.exe', args: '/c powershell.exe -c "Add-Content -Path C:\ProgramData\ssh\administrators_authorized_keys -Value ""{{ ssh.master_key }}"""' }
+        - { shell: 'icacls.exe ', args: '"C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"'}
+        - { shell: 'c:\windows\system32\sysprep\sysprep.exe', args: '/generalize /oobe /shutdown /unattend:C:\Windows\System32\sysprep\unattend.xml'}
+      delegate_to: localhost
+      when: template_state.virtual_machines == []
+
+    - name: Wait for sysprep to finalize (WinSrv takes ~60s; Win11 takes ~300s)
+      ansible.builtin.pause:
+        seconds: 360
+      when: inventory_hostname in groups.windows[0] and template_state.virtual_machines == []
+
+    - name: Convert to template
+      community.vmware.vmware_guest:
+        validate_certs: false
+        hostname: '{{ vmware.host }}'
+        username: '{{ vmware_user }}'
+        password: '{{ vmware_password }}'
+        datacenter: '{{ vmware.datacenter }}'
+        name: '{{ inventory_hostname }}'
+        is_template: true
+      delegate_to: localhost
+      when: template_state.virtual_machines == []

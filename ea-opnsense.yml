@@ -1,0 +1,22 @@
+- name: Configure opensense
+  hosts: opnsense
+  gather_facts: true
+  tasks:
+    - name: Set remote GRE addresses
+      ansible.builtin.set_fact:
+        remote:
+          vlnd: "{{ gre.trt }}"
+          trt: "{{ gre.vlnd }}"
+
+    - name: Copy opnsense configuration
+      ansible.builtin.template:
+        src: templates/fw/opnsense-conf.xml.j2
+        dest: /conf/config.xml
+        owner: root
+        group: wheel
+        mode: 0644
+      notify: Restart
+
+  handlers:
+    - name: Restart
+      ansible.builtin.reboot:

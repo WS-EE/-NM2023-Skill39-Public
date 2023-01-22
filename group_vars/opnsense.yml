@@ -1,0 +1,16 @@
+partner:
+  vlnd: "{{ hostvars['trt-fw'].ansible_facts[public_interface].ipv4.0.address }}"
+  trt: "{{ hostvars['vlnd-fw'].ansible_facts[public_interface].ipv4.0.address }}"
+dhcp_start:
+  vlnd: 5
+  trt: 6
+dhcp_end:
+  vlnd: 6
+  trt: 9
+gre:
+  vlnd: 172.21.0.1
+  trt: 172.21.0.2
+remote_subnet:
+  vlnd: "{{ network.trt.ip }}.0/{{ network.trt.bits }}"
+  trt: "{{ network.vlnd.ip }}.0/{{ network.vlnd.bits }}"
+short_hostname: "{{ inventory_hostname | regex_search('[a-z]*') }}"

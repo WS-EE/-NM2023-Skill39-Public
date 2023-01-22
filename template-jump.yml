@@ -1,0 +1,18 @@
+---
+- name: Network
+  hosts: template-linux-jumphost
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Configure network
+      ansible.builtin.template:
+        src: templates/bastion/interfaces.j2
+        dest: /etc/network/interfaces
+        mode: 0644
+        owner: root
+        group: root
+      register: net_change
+
+    - name: Reboot when network config changed
+      ansible.builtin.reboot:
+      when: net_change is defined and net_change.changed

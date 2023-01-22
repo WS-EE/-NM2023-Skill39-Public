@@ -1,0 +1,93 @@
+- name: Wordpress install
+  hosts: trt-www
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Install LAMP stack
+      ansible.builtin.apt:
+        name:
+          - apache2, libapache2-mod-php
+          - mariadb-server, mariadb-client, python3-pymysql
+          - php-curl, php-gd, php-intl, php-mbstring, php-soap, php-xml, php-xmlrpc, php-zip, php, php-mysql
+        state: present
+
+    - name: Create database
+      community.mysql.mysql_db:
+        login_user: root
+        login_password: ""
+        name: "{{ db.name }}"
+        state: present
+        login_unix_socket: /run/mysqld/mysqld.sock
+
+    - name: Grant privileges
+      community.mysql.mysql_user:
+        login_user: root
+        login_password: ""
+        name: "{{ db.user }}"
+        password: "{{ db.password }}"
+        priv:
+          "{{ db.name }}.*:ALL"
+        state: present
+        login_unix_socket: /run/mysqld/mysqld.sock
+
+    - name: Download wordpress
+      ansible.builtin.get_url:
+        url: https://wordpress.org/latest.tar.gz
+        dest: /tmp/wordpress.tar.gz
+        mode: 777
+
+    - name: Unpack into /var/www/html
+      ansible.builtin.unarchive:
+        src: /tmp/wordpress.tar.gz
+        dest: /var/www/html
+        remote_src: true
+
+    - name: Delete index.html
+      ansible.builtin.file:
+        path: /var/www/html/index.html
+        state: absent
+
+    - name: Change the root of the web pages
+      ansible.builtin.lineinfile:
+        path: /etc/apache2/sites-available/000-default.conf
+        regexp: 'DocumentRoot .*'
+        line: '        DocumentRoot /var/www/html/wordpress'
+      notify: Restart apache2
+
+    - name: Set privileges for the web folder
+      ansible.builtin.file:
+        path: /var/www/html
+        mode: 0755
+        owner: www-data
+        group: www-data
+        recurse: true
+
+    - name: Set wp-config.php file
+      ansible.builtin.template:
+        src: templates/www/wp-config.php.j2
+        dest: /var/www/html/wordpress/wp-config.php
+        owner: www-data
+        group: www-data
+        mode: 0755
+      tags: conf
+
+    - name: Finish wordpress install
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}/wp-admin/install.php?step=2"
+        body_format: form-urlencoded
+        method: POST
+        body:
+          weblog_title: "Eesti Asi AS - Intraveeb"
+          user_name: "admin"
+          admin_password: "Passw0rd$"
+          admin_password2: "Passw0rd$"
+          pw_weak: "on"
+          admin_email: "root@eestiasi.ee"
+          Submit: "Install+WordPress"
+          language: ""
+
+  handlers:
+    - name: Restart apache2
+      ansible.builtin.service:
+        name: apache2
+        state: restarted
