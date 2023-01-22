@@ -159,7 +159,7 @@ In case you don't have connectivity with ISP, VLND and TRT networks from your An
 Clone the previously created Linux template, add 4 network adapters to it:
 * one that is accessible to Ansible managed node, lets call it routed network. IP is requested from DHCP;
 * ISP network adapter, IP 198.51.100.9 is used;
-* VLND network adapter, IP 172.20.0.9 is used;
+* VLND network adapter, IP 172.20.0.9 is used (172.20.0.3 should be used till expanding the subnet as per Test Project);
 * TRT network adapter, IP 172.30.0.9 is used.
 
 Make sure that ens192 interface connects to routed network, ens161 to ISP, ens224 to VLND and ens256 to TRT.<br>
@@ -242,7 +242,7 @@ Configure the Postfix & Dovecot by running playbook as such:
 ```
 
 ### ZABBIX
-Clone the previously created Linux template and connect the TRT network adapter to it.
+Clone the previously created Linux template and connect the VLND network adapter to it.
 
 As bare minimum the internal network IP addresses needs to be configured in the VM after cloning.<br>
 Set the IP address in the `/etc/network/interfaces` as such:
