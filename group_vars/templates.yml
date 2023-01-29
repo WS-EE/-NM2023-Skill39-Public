@@ -6,3 +6,5 @@ vmware:
 template:
   win_username: Administrator
   win_password: 'Passw0rd$'
+  lin_username: root
+  lin_password: 'Passw0rd$'

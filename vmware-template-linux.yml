@@ -1,0 +1,97 @@
+---
+- name: Template - Linux
+  hosts: linux
+  gather_facts: false
+  vars:
+    password:
+      meister: 'Passw0rd$'
+      kohtunik: 'mingiparool'
+      scorer: 'mingiteineparool'
+  tasks:
+    - name: Load personal credentials
+      ansible.builtin.include_vars: '.creds.yml'
+      delegate_to: localhost
+
+    - name: Template state # used later on to determine if template already exist
+      community.vmware.vmware_vm_info:
+        validate_certs: false
+        hostname: '{{ vmware.host }}'
+        username: '{{ vmware_user }}'
+        password: '{{ vmware_password }}'
+        vm_name: '{{ inventory_hostname }}'
+        vm_type: template
+      delegate_to: localhost
+      register: template_state
+
+    - name: Install basic tools
+      community.vmware.vmware_vm_shell:
+        validate_certs: false
+        hostname: '{{ vmware.host }}'
+        username: '{{ vmware_user }}'
+        password: '{{ vmware_password }}'
+        datacenter: '{{ vmware.datacenter }}'
+        vm_id: '{{ inventory_hostname }}'
+        vm_username: '{{ template.lin_username }}'
+        vm_password: '{{ template.lin_password }}'
+        vm_shell: '{{ item.shell }}'
+        vm_shell_args: '{{ item.args }}'
+        wait_for_process: true
+      loop:
+        - { shell: '/bin/apt', args: 'update' }
+        - { shell: '/bin/apt', args: 'install -y vim curl dnsutils net-tools nfs-common wget telnet traceroute' }
+      delegate_to: localhost
+      when: template_state.virtual_machines == []
+
+    - name: Create users
+      community.vmware.vmware_vm_shell:
+        validate_certs: false
+        hostname: '{{ vmware.host }}'
+        username: '{{ vmware_user }}'
+        password: '{{ vmware_password }}'
+        datacenter: '{{ vmware.datacenter }}'
+        vm_id: '{{ inventory_hostname }}'
+        vm_username: '{{ template.lin_username }}'
+        vm_password: '{{ template.lin_password }}'
+        vm_shell: '{{ item.shell }}'
+        vm_shell_args: '{{ item.args }}'
+        wait_for_process: false
+      loop:
+        - { shell: '/bin/sed', args: "-i 's/ALL=(ALL:ALL) ALL/ALL=(ALL) NOPASSWD: ALL/g' /etc/sudoers"}
+        - { shell: '/usr/sbin/useradd', args: '-s /bin/bash kohtunik; mkdir -p /home/kohtunik/.ssh; chown -R kohtunik:kohtunik /home/kohtunik' }
+        - { shell: '/usr/sbin/useradd', args: '-s /bin/bash meister; mkdir -p /home/meister/.ssh; chown -R meister:meister /home/meister' }
+        - { shell: '/usr/sbin/useradd', args: '-s /bin/bash scorer; mkdir -p /home/scorer/.ssh; chown -R scorer:scorer /home/scorer' }
+        - { shell: '/usr/sbin/useradd', args: '-s /bin/bash ansible; mkdir -p /home/ansible/.ssh; chown -R ansible:ansible /home/ansible' }
+        - { shell: '/bin/echo', args: '"kohtunik:{{ password.kohtunik }}" | chpasswd; usermod -aG sudo kohtunik' }
+        - { shell: '/bin/echo', args: '"meister:{{ password.meister }}" | chpasswd; usermod -aG sudo meister' }
+        - { shell: '/bin/echo', args: '"scorer:{{ password.scorer }}" | chpasswd; usermod -aG sudo scorer' }
+        - { shell: '/usr/sbin/usermod', args: '-aG sudo ansible' }
+        - { shell: '/bin/echo', args: '"{{ ssh.master_key }}" >> /home/scorer/.ssh/authorized_keys' }
+        - { shell: '/bin/echo', args: '"{{ ssh.master_key }}" >> /home/ansible/.ssh/authorized_keys' }
+        - { shell: '/bin/chown', args: 'scorer:scorer /home/scorer/.ssh/authorized_keys' }
+        - { shell: '/bin/chown', args: 'ansible:ansible /home/ansible/.ssh/authorized_keys' }
+      delegate_to: localhost
+      when: template_state.virtual_machines == []
+
+    - name: Shutdown the VM
+      community.vmware.vmware_guest:
+        validate_certs: false
+        hostname: '{{ vmware.host }}'
+        username: '{{ vmware_user }}'
+        password: '{{ vmware_password }}'
+        datacenter: '{{ vmware.datacenter }}'
+        name: '{{ inventory_hostname }}'
+        state: poweredoff
+      delegate_to: localhost
+      when: template_state.virtual_machines == []
+
+    - name: Convert to template
+      community.vmware.vmware_guest:
+        validate_certs: false
+        hostname: '{{ vmware.host }}'
+        username: '{{ vmware_user }}'
+        password: '{{ vmware_password }}'
+        datacenter: '{{ vmware.datacenter }}'
+        name: '{{ inventory_hostname }}'
+        is_template: true
+      delegate_to: localhost
+      when: template_state.virtual_machines == []

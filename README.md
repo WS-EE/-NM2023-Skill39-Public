@@ -30,7 +30,7 @@ Parameters that needs to be modified according to your environment
 * `groups_vars/all.yml` update the subnet parameters according to your environment incase these won't work for you
 * `groups_vars/bastion.yml` update the `bastion.key` incase bastion is used, otherwise `ansible_ssh_common_args` can be commented out
 * `groups_vars/templates.yml` update the vmware parameters incase VMware vCenter is used
-* copy `.creds-example.yml` to `.creds` incase VMware vCenter is used
+* copy `.creds-example.yml` to `.creds.yml` incase VMware vCenter is used
 * update `ansible.cfg` user and key parameters according to your setup
 
 The deployment is done through jump host since the ISP, VLND and TRT subnets are not reachable for Ansible Control Node in our environment. We have one jump host for each competitor. In case these subnets are accessible for your Ansible Control Node the bastion parts can be skipped.
@@ -103,6 +103,7 @@ root@OPNsense:~ # vi /conf/config.yml
 
 Install the Windows Server 2022 GUI virtual machine. The methods described below work for Windows 11 and Windows Server 2022 Core machines as well, but these templates are out of scope for "AS IS" topology.
 
+#### VMware template
 Incase you use VMware vCenter for your virtualization environment then playbook can be used to initialize the template. The virtual machine name has to match the `inventories/templates` hostname. The username and password defined in `group_vars/templates.yml` are used to bypass commands in to virtual machine through VMware Tools. 
 
 To create the template machine run the playbook as such:
@@ -110,6 +111,7 @@ To create the template machine run the playbook as such:
 % ansible-playbook vmware-template-windows.yml -i inventories/templates
 ```
 
+#### Manual template
 Configuring the template manually through PowerShell
 ``` powershell
 # Configure the SSH
@@ -129,6 +131,15 @@ c:\windows\system32\sysprep\sysprep.exe /generalize /oobe /shutdown /unattend:C:
 
 Install the Debian 11.6 virtual machine
 
+#### VMware template
+Incase you use VMware vCenter for your virtualization environment then playbook can be used to initialize the template. The virtual machine name has to match the `inventories/templates` hostname. The username and password defined in `group_vars/templates.yml` are used to bypass commands in to virtual machine through VMware Tools. 
+
+To create the template machine run the playbook as such:
+``` shell
+% ansible-playbook vmware-template-linux.yml -i inventories/templates
+```
+
+#### Manual template
 Create the new administrative user for ansible as set in `ansible.cfg`
 ``` bash
 root@debian:~ # adduser ansible

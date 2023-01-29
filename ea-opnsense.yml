@@ -1,6 +1,7 @@
 - name: Configure opensense
   hosts: opnsense
   gather_facts: true
+  become: true
   tasks:
     - name: Set remote GRE addresses
       ansible.builtin.set_fact:

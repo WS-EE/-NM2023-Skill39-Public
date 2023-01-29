@@ -1,6 +1,10 @@
 all:
   hosts:
     template-winsrv-gui:
+    template-winsrv-core:
+    template-win11:
+    template-deb11:
+    template-ubu22:
     template-linux-jumphost:
       ansible_host: '{{ bastion.host }}'
       ansible_user: jump
@@ -16,16 +20,16 @@ all:
         trt:
           interface: ens256
           ip: 172.30.0.9
-          mask: 255.255.255.240    
+          mask: 255.255.255.240
   children:
     templates: # plain templates
       children:
         windows:
           hosts:
+            template-win11:
             template-winsrv-gui:
-    linux:
-      children:
-        jumphost:
+            template-winsrv-core:
+        linux:
           hosts:
-            template-linux-jumphost:
-    
+            template-deb11:
+            template-ubu22:
