@@ -79,7 +79,7 @@
 
     - name: Set wp-config.php file
       ansible.builtin.template:
-        src: templates/c1-ea-www/wp-config.php.j2
+        src: templates/www/wp-config.php.j2
         dest: /var/www/html/wordpress/wp-config.php
         owner: www-data
         group: www-data

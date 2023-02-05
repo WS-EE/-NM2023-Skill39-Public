@@ -41,8 +41,8 @@
         group: root
       notify: Restart postfix
       loop:
-        - { src: "templates/c1-ea-mail/main.cf", dest: "/etc/postfix/main.cf" }
-        - { src: "templates/c1-ea-mail/master.cf", dest: "/etc/postfix/master.cf" }
+        - { src: "templates/mail/main.cf", dest: "/etc/postfix/main.cf" }
+        - { src: "templates/mail/master.cf", dest: "/etc/postfix/master.cf" }
       loop_control:
         loop_var: file
       tags:
@@ -50,7 +50,7 @@
 
     - name: Configure aliases
       ansible.builtin.copy:
-        src: templates/c1-ea-mail/aliases
+        src: templates/mail/aliases
         dest: /etc/aliases
         mode: 0644
         owner: root
@@ -68,9 +68,9 @@
         group: root
       notify: Restart dovecot
       loop:
-        - { src: "templates/c1-ea-mail/dovecot.conf", dest: "/etc/dovecot/dovecot.conf" }
-        - { src: "templates/c1-ea-mail/dovecot-10-master.conf", dest: "/etc/dovecot/conf.d/10-master.conf" }
-        - { src: "templates/c1-ea-mail/dovecot-10-ssl.conf", dest: "/etc/dovecot/conf.d/10-ssl.conf" }
+        - { src: "templates/mail/dovecot.conf", dest: "/etc/dovecot/dovecot.conf" }
+        - { src: "templates/mail/dovecot-10-master.conf", dest: "/etc/dovecot/conf.d/10-master.conf" }
+        - { src: "templates/mail/dovecot-10-ssl.conf", dest: "/etc/dovecot/conf.d/10-ssl.conf" }
       loop_control:
         loop_var: dovecot
 
