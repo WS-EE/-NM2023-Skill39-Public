@@ -3,6 +3,10 @@
   gather_facts: false
   become: true
   tasks:
+    - name: Set a password for mail users
+      ansible.builtin.set_fact:
+        mail_user_password: "seekindlastiv6istluseleikehti"
+
     - name: Install postfix
       ansible.builtin.apt:
         name: postfix
@@ -37,8 +41,8 @@
         group: root
       notify: Restart postfix
       loop:
-        - { src: "templates/mail/main.cf", dest: "/etc/postfix/main.cf" }
-        - { src: "templates/mail/master.cf", dest: "/etc/postfix/master.cf" }
+        - { src: "templates/c1-ea-mail/main.cf", dest: "/etc/postfix/main.cf" }
+        - { src: "templates/c1-ea-mail/master.cf", dest: "/etc/postfix/master.cf" }
       loop_control:
         loop_var: file
       tags:
@@ -46,12 +50,12 @@
 
     - name: Configure aliases
       ansible.builtin.copy:
-        src: templates/mail/aliases
+        src: templates/c1-ea-mail/aliases
         dest: /etc/aliases
         mode: 0644
         owner: root
         group: root
-      notify: alias
+      notify: Alias
       tags:
         - conf
 
@@ -64,11 +68,23 @@
         group: root
       notify: Restart dovecot
       loop:
-        - { src: "templates/mail/dovecot.conf", dest: "/etc/dovecot/dovecot.conf" }
-        - { src: "templates/mail/dovecot-10-master.conf", dest: "/etc/dovecot/conf.d/10-master.conf" }
-        - { src: "templates/mail/dovecot-10-ssl.conf", dest: "/etc/dovecot/conf.d/10-ssl.conf" }
+        - { src: "templates/c1-ea-mail/dovecot.conf", dest: "/etc/dovecot/dovecot.conf" }
+        - { src: "templates/c1-ea-mail/dovecot-10-master.conf", dest: "/etc/dovecot/conf.d/10-master.conf" }
+        - { src: "templates/c1-ea-mail/dovecot-10-ssl.conf", dest: "/etc/dovecot/conf.d/10-ssl.conf" }
       loop_control:
         loop_var: dovecot
+
+    - name: Add mail users
+      ansible.builtin.user:
+        name: "{{ item }}"
+        password: "{{ mail_user_password | password_hash('sha512') }}"
+        state: present
+        create_home: true
+        skeleton: "/home/{{ item }}"
+        shell: /bin/bash
+      loop:
+        - mia
+        - peeter
 
     - name: Make sure mail file exists for users
       ansible.builtin.file:
@@ -79,6 +95,8 @@
         group: mail
       loop:
         - meister
+        - mia
+        - peeter
       loop_control:
         loop_var: user
       tags:

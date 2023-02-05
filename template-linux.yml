@@ -2,37 +2,60 @@
   hosts: linux
   gather_facts: false
   become: true
-  vars:
-    meister_password: 'Passw0rd$'
   tasks:
     - name: Set hostname
       ansible.builtin.hostname:
         name: "{{ inventory_hostname }}"
+      register: hosts_file
       notify:
         - Restart machine
-        - Set hosts
       tags:
         - hostname
-
-    - name: Add meister user
-      ansible.builtin.user:
-        name: meister
-        password: "{{ meister_password | password_hash('sha512') }}"
-        group: meister
-        groups: sudo, meister
-        state: present
-        create_home: true
-        skeleton: /home/meister
-        shell: /bin/bash
-      when: "'isp' not in group_names"
-
-  handlers:
-
-    - name: Restart machine
-      ansible.builtin.reboot:
 
     - name: Set hosts
       ansible.builtin.lineinfile:
         path: /etc/hosts
         insertafter: 127.0.0.1  localhost
         line: "127.1.1.1   {{ inventory_hostname }}"
+      when: hosts_file is defined and hosts_file.changed
+
+    - name: ISP nameserver
+      ansible.builtin.lineinfile:
+        path: /etc/resolv.conf
+        search_string: '1.1.1.1'
+        line: nameserver 198.51.100.2
+        owner: root
+        group: root
+        mode: '0644'
+      when: "'isp' in group_names"
+
+    - name: EA nameserver 1
+      ansible.builtin.lineinfile:
+        path: /etc/resolv.conf
+        search_string: '1.1.1.1'
+        line: nameserver 172.20.0.2
+        owner: root
+        group: root
+        mode: '0644'
+      register: add_ns
+      when: "'isp' not in group_names and 'c2' not in group_names"
+
+    - name: EA nameserver 2
+      ansible.builtin.lineinfile:
+        path: /etc/resolv.conf
+        insertafter: nameserver 172.20.0.2
+        line: "nameserver 172.30.0.2"
+      when: add_ns is defined and add_ns.changed
+
+    - name: Delete generic users from ISP
+      ansible.builtin.user:
+        name: '{{ item }}'
+        state: absent
+      when: "'isp' in group_names"
+      loop:
+        - meister
+        - kohtunik
+
+  handlers:
+    - name: Restart machine
+      ansible.builtin.reboot:

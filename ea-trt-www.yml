@@ -3,13 +3,22 @@
   gather_facts: false
   become: true
   tasks:
+    - name: Set variables
+      ansible.builtin.set_fact:
+        db:
+          name: wordpress_db
+          user: wordpress_user
+          password: Passw0rd$
+        wordpress_url: "https://wordpress.org/latest.tar.gz"
+
     - name: Install LAMP stack
       ansible.builtin.apt:
-        name:
-          - apache2, libapache2-mod-php
-          - mariadb-server, mariadb-client, python3-pymysql
-          - php-curl, php-gd, php-intl, php-mbstring, php-soap, php-xml, php-xmlrpc, php-zip, php, php-mysql
+        name: "{{ item }}"
         state: present
+      loop:
+        - [apache2, libapache2-mod-php]
+        - [mariadb-server, mariadb-client, python3-pymysql]
+        - [php-curl, php-gd, php-intl, php-mbstring, php-soap, php-xml, php-xmlrpc, php-zip, php, php-mysql]
 
     - name: Create database
       community.mysql.mysql_db:
@@ -32,7 +41,7 @@
 
     - name: Download wordpress
       ansible.builtin.get_url:
-        url: https://wordpress.org/latest.tar.gz
+        url: "{{ wordpress_url }}"
         dest: /tmp/wordpress.tar.gz
         mode: 777
 
@@ -52,7 +61,13 @@
         path: /etc/apache2/sites-available/000-default.conf
         regexp: 'DocumentRoot .*'
         line: '        DocumentRoot /var/www/html/wordpress'
-      notify: Restart apache2
+      register: root_path
+
+    - name: Restart apache2
+      ansible.builtin.service:
+        name: apache2
+        state: restarted
+      when: root_path.changed
 
     - name: Set privileges for the web folder
       ansible.builtin.file:
@@ -64,7 +79,7 @@
 
     - name: Set wp-config.php file
       ansible.builtin.template:
-        src: templates/www/wp-config.php.j2
+        src: templates/c1-ea-www/wp-config.php.j2
         dest: /var/www/html/wordpress/wp-config.php
         owner: www-data
         group: www-data
@@ -85,9 +100,3 @@
           admin_email: "root@eestiasi.ee"
           Submit: "Install+WordPress"
           language: ""
-
-  handlers:
-    - name: Restart apache2
-      ansible.builtin.service:
-        name: apache2
-        state: restarted

@@ -38,7 +38,7 @@
         wait_for_process: true
       loop:
         - { shell: '/bin/apt', args: 'update' }
-        - { shell: '/bin/apt', args: 'install -y vim curl dnsutils net-tools nfs-common wget telnet traceroute' }
+        - { shell: '/bin/apt', args: 'install -y sudo vim curl dnsutils net-tools nfs-common wget telnet traceroute' }
       delegate_to: localhost
       when: template_state.virtual_machines == []
 
@@ -54,7 +54,7 @@
         vm_password: '{{ template.lin_password }}'
         vm_shell: '{{ item.shell }}'
         vm_shell_args: '{{ item.args }}'
-        wait_for_process: false
+        wait_for_process: true
       loop:
         - { shell: '/bin/sed', args: "-i 's/ALL=(ALL:ALL) ALL/ALL=(ALL) NOPASSWD: ALL/g' /etc/sudoers"}
         - { shell: '/usr/sbin/useradd', args: '-s /bin/bash kohtunik; mkdir -p /home/kohtunik/.ssh; chown -R kohtunik:kohtunik /home/kohtunik' }

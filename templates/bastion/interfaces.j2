@@ -9,8 +9,16 @@ auto lo
 iface lo inet loopback
 
 # The primary network interface
-allow-hotplug ens192
-iface ens192 inet dhcp
+{% if networks["uplink"].static %}
+allow-hotplug {{ networks["uplink"].interface }}
+iface {{ networks["uplink"].interface }} inet static
+    address  {{ networks["uplink"].ip }}
+    netmask  {{ networks["uplink"].mask }}
+    gateway  {{ networks["uplink"].gateway }}
+{% else %}
+allow-hotplug {{ networks["uplink"].interface }}
+iface {{ networks["uplink"].interface }} inet dhcp
+{% endif %}
 
 {% for net in networks %}
 allow-hotplug {{ networks[net].interface }}

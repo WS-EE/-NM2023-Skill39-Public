@@ -8,16 +8,184 @@
         remote:
           vlnd: "{{ gre.trt }}"
           trt: "{{ gre.vlnd }}"
+        ansible_xml: ~/.config
 
-    - name: Copy opnsense configuration
-      ansible.builtin.template:
-        src: templates/fw/opnsense-conf.xml.j2
-        dest: /conf/config.xml
+    - name: Fetch opnsense configuration
+      ansible.builtin.fetch:
+        src: /conf/config.xml
+        dest: "{{ ansible_xml }}"
         owner: root
         group: wheel
         mode: 0644
-      notify: Restart
+        remote_src: true
+
+    - name: Add xml values
+      community.general.xml:
+        path: "{{ ansible_xml }}/{{ inventory_hostname }}/conf/config.xml"
+        xpath: "{{ item.xpath }}"
+        value: "{{ item.value }}"
+        pretty_print: true
+      become: false
+      delegate_to: localhost
+      loop:
+        # set hostname
+        - xpath: /opnsense/system/hostname
+          value: "{{ inventory_hostname }}"
+        - xpath: /opnsense/system/domain
+          value: eestiasi.ee
+        # set timezone
+        - xpath: /opnsense/system/timezone
+          value: "Europe/Helsinki"
+        # set root user password
+        - xpath: /opnsense/system/user/password
+          value: $2y$10$C4iVOTDr3NwQoflbdbN.4.pjuFnwiPHJ/CoPZwhCObvuBR9Mii5pq
+        - xpath: /opnsense/system/nextuid
+          value: 2001
+        # set lan conf
+        - xpath: /opnsense/interfaces/lan/ipaddr
+          value: "{{ ansible_host }}"
+        - xpath: /opnsense/interfaces/lan/subnet
+          value: "{{ network[short_hostname].bits }}"
+        # set gre interface
+        - xpath: /opnsense/interfaces/opt1/if
+          value: gre0
+        - xpath: /opnsense/interfaces/opt1/descr
+          value: GRE
+        - xpath: /opnsense/interfaces/opt1/enable
+          value: 1
+        # set dhcpd
+        - xpath: /opnsense/dhcpd/lan/enable
+          value: 1
+        - xpath: /opnsense/dhcpd/lan/range/from
+          value: "{{ network[short_hostname].ip }}.{{ dhcp_start[short_hostname] }}"
+        - xpath: /opnsense/dhcpd/lan/range/to
+          value: "{{ network[short_hostname].ip }}.{{ dhcp_end[short_hostname] }}"
+        - xpath: /opnsense/dhcpd/lan/domain
+          value: eestiasi.ee
+        - xpath: /opnsense/dhcpd/lan/gateway
+          value: "{{ network[short_hostname].ip }}.1"
+        - xpath: /opnsense/dhcpd/lan/dnsserver
+          value: "{{ network[short_hostname].ip }}.2"
+        # set GRE route
+        - xpath: /opnsense/staticroutes[@version="1.0.0"]/route[@uuid="293baeab-85d2-440a-a73a-155db80e89e1"]/network
+          value: "{{ remote_subnet[short_hostname] }}"
+        - xpath: /opnsense/staticroutes[@version="1.0.0"]/route[@uuid="293baeab-85d2-440a-a73a-155db80e89e1"]/gateway
+          value: GRE_TUNNELV4
+        - xpath: /opnsense/staticroutes[@version="1.0.0"]/route[@uuid="293baeab-85d2-440a-a73a-155db80e89e1"]/diasbled
+          value: 0
+        # set public network route
+        - xpath: /opnsense/staticroutes[@version="1.0.0"]/route[@uuid="293baeab-85d2-440a-a73a-155db80e89a1"]/network
+          value: "0.0.0.0/0"
+        - xpath: /opnsense/staticroutes[@version="1.0.0"]/route[@uuid="293baeab-85d2-440a-a73a-155db80e89a1"]/gateway
+          value: WAN_DHCP
+        - xpath: /opnsense/staticroutes[@version="1.0.0"]/route[@uuid="293baeab-85d2-440a-a73a-155db80e89a1"]/diasbled
+          value: 0
+        # set gre interface
+        - xpath: /opnsense/gres/gre/if
+          value: wan
+        - xpath: /opnsense/gres/gre/greif
+          value: gre0
+        - xpath: /opnsense/gres/gre/remote-addr
+          value: "{{ partner[short_hostname] }}"
+        - xpath: /opnsense/gres/gre/tunnel-remote-net
+          value: 30
+        - xpath: /opnsense/gres/gre/tunnel-local-addr
+          value: "{{ gre[short_hostname] }}"
+        - xpath: /opnsense/gres/gre/tunnel-remote-addr
+          value: "{{ remote[short_hostname] }}"
+        # set admin interfaces to local interfaces
+        - xpath: /opnsense/system/webui/interfaces
+          value: opt1,lan
+        - xpath: /opnsense/system/ssh/interfaces
+          value: opt1,lan
+
+    - name: Add secondary dnsserver
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_xml }}/{{ inventory_hostname }}/conf/config.xml"
+        line: "<dnsserver>{{ network[short_hostname_rvrs].ip }}.2</dnsserver>"
+        insertafter: dnsserver>
+        regexp: "dnsserver>{{ network[short_hostname_rvrs].ip }}.2"
+      delegate_to: localhost
+      become: false
+
+    - name: Remove xml values
+      community.general.xml:
+        path: "{{ ansible_xml }}/{{ inventory_hostname }}/conf/config.xml"
+        xpath: "{{ item }}"
+        state: absent
+      become: false
+      delegate_to: localhost
+      loop:
+        - /opnsense/system/timeservers
+        - /opnsense/system/dnsallowoverride
+        - /opnsense/interfaces/wan/blockpriv
+        - /opnsense/interfaces/wan/blockbogons
+
+    - name: Check if meister exists
+      community.general.xml:
+        path: "{{ ansible_xml }}/{{ inventory_hostname }}/conf/config.xml"
+        xpath: /opnsense/system/user/uid
+        content: text
+      register: meister_xml
+      become: false
+      changed_when: "'2000' not in meister_xml | regex_findall('2000')"
+      delegate_to: localhost
+
+    - name: Add meister to admin group
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_xml }}/{{ inventory_hostname }}/conf/config.xml"
+        insertafter: member>0
+        regexp: member>2000
+        line: <member>2000</member>
+      delegate_to: localhost
+      become: false
+      when: meister_xml.changed
+
+    - name: Add meister user
+      ansible.builtin.blockinfile:
+        path: "{{ ansible_xml }}/{{ inventory_hostname }}/conf/config.xml"
+        insertbefore: nextuid
+        marker: "   {mark}"
+        marker_begin: <user>
+        marker_end: </user>
+        block: |
+                <name>meister</name>
+                <password>$2y$10$DiRRsqLaGOswXvJOyHlO6.Pk7iAFpewFvJZ10drZRZbk/1KrzTpxW</password>
+                <scope>user</scope>
+                <descr>võistleja</descr>
+                <uid>2000</uid>
+                <shell>/bin/sh</shell>
+                <comment>Noor Meister 2023</comment>
+      delegate_to: localhost
+      become: false
+      when: meister_xml.changed
+
+    - name: Copy config file
+      ansible.builtin.copy:
+        src: "{{ ansible_xml }}/{{ inventory_hostname }}/conf/config.xml"
+        dest: /conf/config.xml
+        mode: 0640
+        group: wheel
+        owner: root
+      notify:
+        - Sync
+        - Reboot
+
+    - name: Remove temp conf files
+      ansible.builtin.file:
+        path: "{{ ansible_xml }}"
+        state: absent
+      delegate_to: localhost
+      run_once: true
+      become: false
+
 
   handlers:
-    - name: Restart
+    - name: Sync
+      ansible.builtin.command: "{{ item }}"
+      throttle: 1
+      with_items:
+        - configctl filter sync
+
+    - name: Reboot
       ansible.builtin.reboot:

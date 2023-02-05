@@ -9,16 +9,22 @@ all:
       ansible_host: '{{ bastion.host }}'
       ansible_user: jump
       networks:
-        isp:
+        uplink:
+          static: true
           interface: ens161
+          ip: 10.20.23.254
+          mask: 255.255.255.0
+          gateway: 10.20.23.1
+        isp:
+          interface: ens192
           ip: 198.51.100.9
           mask: 255.255.255.0
         vlnd:
-          interface: ens224
+          interface: ens193
           ip: 172.20.0.9
           mask: 255.255.255.240
         trt:
-          interface: ens256
+          interface: ens224
           ip: 172.30.0.9
           mask: 255.255.255.240
   children:
