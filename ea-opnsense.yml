@@ -189,3 +189,12 @@
 
     - name: Reboot
       ansible.builtin.reboot:
+
+- name: Install snmp plugin
+  hosts: opnsense
+  become: true
+  tasks:
+    - name: Install snmp plugin
+      community.general.pkgng:
+        name: 'os-net-snmp'
+        state: present
