@@ -14,3 +14,4 @@ remote_subnet:
   vlnd: "{{ network.trt.ip }}.0/{{ network.trt.bits }}"
   trt: "{{ network.vlnd.ip }}.0/{{ network.vlnd.bits }}"
 short_hostname: "{{ inventory_hostname | regex_search('[a-z]*') }}"
+short_hostname_rvrs: "{{ hostvars[groups['opnsense'][((groups['opnsense'].index(inventory_hostname)) - 1)]]['inventory_hostname'] | regex_search('[a-z]*') }}"
